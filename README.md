@@ -55,3 +55,21 @@ MAX_STEPS=448 LR=1e-4 N_ROLLOUTS=4 SAVE_STEPS=56 \
   OUTPUT_DIR=/workspace/outputs/32B-LoRA-GRPO-TRL-v2 \
   nohup bash run_32b_lora_grpo_trl.sh > logs/v2_$(date +%Y%m%d_%H%M%S).log 2>&1 &
 ```
+
+
+
+profiling
+<img width="2412" height="813" alt="image" src="https://github.com/user-attachments/assets/cc20b5a9-7dc8-4155-bc13-f65650f2a4d5" />
+
+train
+<img width="2415" height="792" alt="image" src="https://github.com/user-attachments/assets/e9997db3-d602-44ba-b152-da70b554c56c" />
+<img width="2424" height="792" alt="image" src="https://github.com/user-attachments/assets/e91cda67-c7d1-4d03-b815-4c42f07ad78f" />
+<img width="2415" height="806" alt="image" src="https://github.com/user-attachments/assets/506d7321-db3d-42a8-8037-5e7dfe10c816" />
+<img width="2421" height="807" alt="image" src="https://github.com/user-attachments/assets/b78bda36-5212-4db0-9db6-83b4b17e1693" />
+<img width="1746" height="474" alt="image" src="https://github.com/user-attachments/assets/faaffdbb-7b59-41c1-890c-adf7a50f1d83" />
+
+
+
+
+
+
