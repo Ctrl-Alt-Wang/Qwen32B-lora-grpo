@@ -45,35 +45,39 @@
 
 ## 实验总览
 
-| 实验 | 步数 | N_ROLLOUTS | LR | 后100步均值 | 最高 Reward | 时长 | 状态 | 是否收敛 |
-|------|------|------------|-----|------------|------------|------|------|---------|
-| [v1](runs/v1/) | 280 | 2 | 1e-4 | 0.707 | 0.779 | 8.4h | 完成 | 否 |
-| [v2](runs/v2/) | 448 | 4 | 1e-4 | 0.754 | 0.808 | 13h | 完成 | 否 |
-| [v3](runs/v3/) | 672 | 4 | 1e-4 | **0.761** | 0.801 | 18.6h | 完成 | **是（step 448+）** |
+| 实验 | 步数 | N_ROLLOUTS | lora_r | max_completion_len | LR | 后100步均值 | 最高 Reward | 时长 | evidence_ii | 状态 |
+|------|------|------------|--------|-------------------|-----|------------|------------|------|-------------|------|
+| [v1](runs/v1/) | 280 | 2 | 8 | 512 | 1e-4 | 0.707 | 0.779 | 8.4h | — | 完成（未收敛）|
+| [v2](runs/v2/) | 448 | 4 | 8 | 512 | 1e-4 | 0.754 | 0.808 | 13h | — | 完成（未收敛）|
+| [v3](runs/v3/) | 672 | 4 | 8 | 512 | 1e-4 | 0.761 | 0.801 | 18.6h | 64.1 | 完成（收敛）|
+| [v4](runs/v4/) | 672 | 4 | **16** | 512 | 1e-4 | **0.786** | **0.824** | 20.7h | **65.5** | 完成（收敛）|
+| v5 | 672 | 4 | 16 | **1024** | 1e-4 | — | — | ~27h | — | 训练中 |
 
-> v2、v3 均从 base model 全新起点开始，超参数完全相同，仅步数不同。v3 确认在 step 448 后收敛，平台值 **~0.76**。
+> v4 唯一变更：`lora_r` 8→16，确认更大 rank 提升收敛平台（+0.025），但 evidence_ii 增益有限（+1.4），提示单纯扩容收益递减。  
+> v5 唯一变更：`max_completion_length` 512→1024，探索生成长度上限对引用完整性和信息全面性的影响（v4 末期 mean_length 已达 414/512）。
 
 ---
 
-## 三次实验核心对比
+## 四次实验核心对比
 
 ### 关键指标
 
-| 指标 | v1（N_ROLLOUTS=2） | v2（N_ROLLOUTS=4） | v3（N_ROLLOUTS=4） |
-|------|-------------------|-------------------|--------------------|
-| 步数 | 280 | 448 | 672 |
-| 最终 reward | 0.713 | 0.748 | 0.738 |
-| 最高 reward | 0.779 | 0.808 | 0.801 |
-| 后 50 步均值 | 0.707 | 0.753 | **0.762** |
-| 后 100 步均值 | 0.707 | 0.754 | **0.761** |
-| 后 100 步 std | — | — | **0.015（收敛）** |
-| KL 散度均值 | 0.016 | 0.060 | 0.066 |
-| Reward std 均值 | 0.035 | 0.045 | **0.047** |
-| 梯度范数均值 | 0.053 | 0.068 | 0.085 |
-| 最终 loss | 0.00162 | 0.00681 | 0.00705 |
-| Clip ratio | 0（全程） | 0（全程） | 0（全程） |
-| 每步耗时 | 104s | 104s | 99s |
-| 是否收敛 | 否 | 否 | **是（step 448+）** |
+| 指标 | v1（N_ROLLOUTS=2） | v2（N_ROLLOUTS=4） | v3（N_ROLLOUTS=4） | v4（lora_r=16） |
+|------|-------------------|-------------------|--------------------|----------------|
+| 步数 | 280 | 448 | 672 | 672 |
+| lora_r | 8 | 8 | 8 | **16** |
+| max_completion_len | 512 | 512 | 512 | 512 |
+| 最终 reward | 0.713 | 0.748 | 0.738 | **0.788** |
+| 最高 reward | 0.779 | 0.808 | 0.801 | **0.824**（step 631）|
+| 后 50 步均值 | 0.707 | 0.753 | 0.762 | **0.786** |
+| 后 100 步均值 | 0.707 | 0.754 | 0.761 | **0.786** |
+| 后 100 步 std | — | — | 0.015 | **0.016（收敛）** |
+| KL 散度（final） | 0.016 | 0.060 | 0.066 | **0.073** |
+| 最终 loss | 0.00162 | 0.00681 | 0.00705 | ~0.008 |
+| 每步耗时 | 104s | 104s | 99s | **125s** |
+| 训练时长 | 8.4h | 13h | 18.6h | **20.7h** |
+| evidence_ii 得分 | — | — | 64.1 | **65.5** |
+| 是否收敛 | 否 | 否 | 是（step 448+）| **是（step 505+）** |
 
 ### Reward 分段进展对比（每 56 步）
 
@@ -165,14 +169,13 @@ v3（672步）在 step 448 后明显收敛，后 224 步四个分段均值均在
 616–671: 0.761（std=0.015，< 0.02 收敛阈值）
 ```
 
-**结论：该配置（N_ROLLOUTS=4，LR=1e-4，LoRA r=8）的 reward 上限约为 0.76。**  
-继续增加步数收益递减（448→672 多跑 50% 步数，后段均值仅提升 +0.007）。
+**v3 结论：该配置（N_ROLLOUTS=4，LR=1e-4，LoRA r=8）的 reward 上限约为 0.76。**
 
-**突破 0.76 平台的方向：**
-- `N_ROLLOUTS=8`：advantage 估计更精确，预期 reward 上限可达 0.78+
-- `LoRA r=16`：更强的适配器表达能力
-- 调整奖励权重（format:RM 由 0.5:0.5 改为 0.3:0.7）
-- 数据增强（900条 → 2000+条）
+**v4 验证（lora_r=16）：** 收敛平台提升至 0.786（+0.025），evidence_ii 65.5（+1.4）。更大 rank 确有帮助，但边际收益已开始递减——v1→v3 training reward 涨 0.054，eval 涨 ~4 分；v3→v4 涨 0.025，eval 只涨 1.4 分。
+
+**v4 观察到的新约束：** v4 末期 mean_length 达 414/512，生成长度接近 `max_completion_length` 上限，引用完整性和信息全面性受限可能与此直接相关。
+
+**v5 方向（进行中）：** `max_completion_length` 512→1024，其余参数与 v4 完全相同，验证长度上限是否是当前瓶颈。
 
 ---
 
@@ -210,10 +213,15 @@ v3（672步）在 step 448 后明显收敛，后 224 步四个分段均值均在
 │   │   ├── hyperparameters.md          # 参数变更记录
 │   │   ├── training_log_analysis.md    # 逐步指标分析（448 步）
 │   │   └── metrics.csv                 # 448 步完整数据
-│   └── v3/
-│       ├── README.md                   # v3 运行总结（含三跑对比，收敛验证）
-│       ├── hyperparameters.md          # 参数说明
-│       ├── training_log_analysis.md    # 逐步指标分析（672 步，含 spike 分析）
+│   ├── v3/
+│   │   ├── README.md                   # v3 运行总结（含三跑对比，收敛验证）
+│   │   ├── hyperparameters.md          # 参数说明
+│   │   ├── training_log_analysis.md    # 逐步指标分析（672 步，含 spike 分析）
+│   │   └── metrics.csv                 # 672 步完整数据
+│   └── v4/
+│       ├── README.md                   # v4 运行总结（lora_r=16，evidence_ii 65.5）
+│       ├── hyperparameters.md          # 与 v3 唯一变更：lora_r 8→16
+│       ├── training_log_analysis.md    # 逐步指标分析（672 步）
 │       └── metrics.csv                 # 672 步完整数据
 └── docs/
     └── environment_setup_journey.md    # VERL→TRL 迁移全过程（13 个 bug 记录）
@@ -228,13 +236,13 @@ ssh -p 23 root@117.50.171.247
 cd /workspace/post_train/sql_agent
 source /root/lora_grpo/bin/activate
 
-# 查看当前训练进度
-tail -f logs/v3_rollout4_12epoch_20260604.log | grep -E "reward|step|wandb"
+# 查看当前训练进度（v5）
+tail -f logs/v5_*.log | grep -E "reward|step|wandb"
 
-# 启动新实验（参数按需修改）
-MAX_STEPS=672 LR=1e-4 N_ROLLOUTS=4 SAVE_STEPS=56 RUN_VERSION=v3 \
-  OUTPUT_DIR=/workspace/outputs/32B-LoRA-GRPO-TRL-v3 \
-  nohup bash run_32b_lora_grpo_trl.sh > logs/v3_$(date +%Y%m%d_%H%M%S).log 2>&1 &
+# 启动 v5（max_completion_length=1024，其余同 v4）
+LORA_R=16 LORA_ALPHA=32 MAX_STEPS=672 LR=1e-4 GRAD_ACCUM=4 N_ROLLOUTS=4 \
+  MAX_RESPONSE_LEN=1024 OUTPUT_DIR=/workspace/outputs/32B-LoRA-GRPO-TRL-v5 \
+  RUN_VERSION=v5 bash run_32b_lora_grpo_trl.sh
 ```
 
 ---
@@ -245,3 +253,5 @@ MAX_STEPS=672 LR=1e-4 N_ROLLOUTS=4 SAVE_STEPS=56 RUN_VERSION=v3 \
 - v1 run：`qwen32b-lora-r8-trl`（未版本化，历史记录）
 - v2 run：`qwen32b-lora-r8-rollout4-v2`（run ID: f9wu6by1）
 - v3 run：`qwen32b-lora-r8-rollout4-v3`（run ID: 5fc1638k，已完成）
+- v4 run：`qwen32b-lora-r16-rollout4-v4`（run ID: 4rusviq8，已完成）
+- v5 run：`qwen32b-lora-r16-rollout4-v5`（训练中）
